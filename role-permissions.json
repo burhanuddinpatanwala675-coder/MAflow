@@ -1,0 +1,33 @@
+{
+  "_comment": "SINGLE SOURCE OF TRUTH for role permissions. Do not hand-edit ROLE_PERMS in index.html or roleCanWrite() in firestore.rules directly — edit this file, then run `node generate-rules.js` to regenerate both. CI/pre-deploy should run `node generate-rules.js --check` and fail the build if either file has drifted from this file.",
+
+  "moduleToCollections": {
+    "quotations": ["quotations"],
+    "challans": ["challans"],
+    "invoices": ["invoices"],
+    "salestax": ["salestaxinvoices"],
+    "commercial": ["commercialbills"],
+    "purchases": ["purchases"],
+    "parties": ["customers", "suppliers"],
+    "products": ["products"],
+    "payments": ["payments"],
+    "expenses": ["expenses"],
+    "bank": ["bankaccounts"],
+    "settings": ["settings"]
+  },
+
+  "roles": {
+    "owner":     { "*": "w" },
+    "admin":     { "*": "w" },
+    "sales":     { "dashboard": "r", "quotations": "w", "challans": "w", "invoices": "w", "parties": "w", "products": "r", "payments": "w", "reports": "r", "ledger": "r" },
+    "accounts":  { "dashboard": "r", "quotations": "r", "challans": "r", "invoices": "w", "salestax": "w", "commercial": "w", "purchases": "w", "parties": "w", "products": "r", "payments": "w", "expenses": "w", "bank": "w", "reports": "r", "ledger": "w", "audit": "r" },
+    "warehouse": { "dashboard": "r", "challans": "w", "purchases": "w", "parties": "r", "products": "w", "reports": "r" },
+    "viewer":    { "*": "r" }
+  },
+
+  "planLimits": {
+    "trial":    { "maxMembers": 10, "blockedModules": [] },
+    "starter":  { "maxMembers": 3,  "blockedModules": ["salestax", "commercial", "bank"] },
+    "business": { "maxMembers": 10, "blockedModules": [] }
+  }
+}

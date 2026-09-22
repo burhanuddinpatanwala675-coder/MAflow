@@ -1,0 +1,241 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════
+// MULTI-TENANT SECURITY RULES
+//
+// Data model:
+//   /users/{uid}                                    — convenience pointer only (NOT an auth source of truth)
+//   /companies/{companyId}                          — one doc per tenant (name, plan, status, trialEndsAt...)
+//   /companies/{companyId}/members/{uid}             — membership + role. THIS is the source of truth for access.
+//   /companies/{companyId}/{quotations|invoices|...} — all business data, scoped under the tenant's own path
+//   /superadmins/{uid}                               — platform-owner allowlist (managed out-of-band, never by clients)
+//
+// SECURITY MODEL — read this before changing anything:
+//   Authorization is ALWAYS decided by whether a
+//   companies/{companyId}/members/{request.auth.uid} document exists — never
+//   by the companyId a client claims in /users/{uid} or sends in a request.
+//   /users/{uid} is only a client-side "which company do I belong to" pointer
+//   used to route the app's queries; a user editing their own pointer to a
+//   companyId they aren't a member of gains nothing, because they still fail
+//   isMember() for that company's data.
+// ═══════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ──────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+
+    function memberDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
+    }
+
+    function isMember(companyId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid))
+        && memberDoc(companyId).data.status == 'active';
+    }
+
+    function memberRole(companyId) {
+      return memberDoc(companyId).data.role;
+    }
+
+    function companyDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId));
+    }
+
+    // Trial or paid companies may write; expired/suspended companies are read-only.
+    // (Data is never deleted on expiry — only new writes are blocked.)
+    function companyWriteAllowed(companyId) {
+      return companyDoc(companyId).data.status in ['trial', 'active'];
+    }
+
+    function isBusinessCollection(c) {
+      return c in [
+        'quotations','challans','invoices','salestaxinvoices','commercialbills',
+        'purchases','customers','suppliers','products','payments','expenses',
+        'bankaccounts','settings'
+      ];
+    }
+
+    // Per-role, per-collection write matrix.
+    // GENERATED — DO NOT HAND-EDIT. Source of truth is role-permissions.json.
+    // Run `node generate-rules.js` after changing that file to regenerate this
+    // function (and the matching ROLE_PERMS in index.html).
+    /* ROLE_MATRIX:START */
+    function roleCanWrite(companyId, collectionId) {
+      let role = memberRole(companyId);
+      return role in ['owner','admin']
+            || (role == 'sales' && collectionId in ['quotations','challans','invoices','customers','suppliers','payments'])
+            || (role == 'accounts' && collectionId in ['invoices','salestaxinvoices','commercialbills','purchases','customers','suppliers','payments','expenses','bankaccounts'])
+            || (role == 'warehouse' && collectionId in ['challans','purchases','products']);
+    }
+/* ROLE_MATRIX:END */
+
+    function isSuperAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/superadmins/$(request.auth.uid));
+    }
+
+    // ── /users/{uid} — self-only pointer doc, not an authorization source ──
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ── /superadmins/{uid} — allowlist for the hidden Super Admin portal ──
+    // Never writable by clients. Add entries from the Firebase Console (or a
+    // trusted backend/Cloud Function) only, after manually vetting the person.
+    match /superadmins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // ── /companies/{companyId} — tenant profile + subscription status ──
+    match /companies/{companyId} {
+      allow read: if isMember(companyId) || isSuperAdmin();
+
+      // Registration: an authenticated user may create exactly one company
+      // doc naming themself as owner, and only if that companyId isn't taken.
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'trial'
+        && !exists(/databases/$(database)/documents/companies/$(companyId));
+
+      // Owners/admins may edit their own company profile, but never the
+      // billing-controlled fields — those are Super-Admin / backend only.
+      allow update: if (isMember(companyId) && memberRole(companyId) in ['owner','admin']
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.plan == resource.data.plan
+          && request.resource.data.trialEndsAt == resource.data.trialEndsAt
+          && request.resource.data.ownerUid == resource.data.ownerUid)
+        || isSuperAdmin();
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── /companies/{companyId}/members/{uid} — who belongs, and their role ──
+    match /companies/{companyId}/members/{memberId} {
+      allow read: if isMember(companyId) || isSuperAdmin();
+
+      // Two ways a member doc can be created:
+      //  1) The founding owner, immediately after the company doc is created.
+      //  2) An invited teammate, accepting a pending invite addressed to their
+      //     own verified auth email — role comes from the invite, never from
+      //     whatever the client sends, so an invitee can't grant themself 'owner'.
+      allow create: if signedIn() && memberId == request.auth.uid && (
+        (request.resource.data.role == 'owner'
+          && companyDoc(companyId).data.ownerUid == request.auth.uid)
+        ||
+        (request.auth.token.email != null
+          && exists(/databases/$(database)/documents/companies/$(companyId)/invites/$(request.auth.token.email))
+          && get(/databases/$(database)/documents/companies/$(companyId)/invites/$(request.auth.token.email)).data.status == 'pending'
+          && request.resource.data.role == get(/databases/$(database)/documents/companies/$(companyId)/invites/$(request.auth.token.email)).data.role)
+      ) && !exists(/databases/$(database)/documents/companies/$(companyId)/members/$(memberId));
+
+      allow update: if isSuperAdmin() || (
+        isMember(companyId) && memberRole(companyId) in ['owner','admin']
+        && request.resource.data.role != 'owner'
+        && (resource.data.role != 'owner' || memberId == request.auth.uid)
+      );
+      allow delete: if (isMember(companyId) && memberRole(companyId) == 'owner' && memberId != request.auth.uid) || isSuperAdmin();
+    }
+
+    // ── /companies/{companyId}/invites/{email} — pending team invitations ──
+    // Keyed by the invitee's lowercased email so both the owner (creating it)
+    // and the invitee (reading/accepting it) can reach it by direct path —
+    // Firestore rules can't run a query, only exact get()/exists() lookups.
+    match /companies/{companyId}/invites/{email} {
+      allow read: if isMember(companyId) || (signedIn() && request.auth.token.email == email) || isSuperAdmin();
+
+      allow create: if isMember(companyId) && memberRole(companyId) in ['owner','admin']
+        && request.resource.data.role in ['admin','sales','accounts','warehouse','viewer']
+        && request.resource.data.status == 'pending';
+
+      // Owner/admin can cancel or re-send; the invitee (matching email) may only
+      // flip status to 'accepted' once, right after creating their own member doc.
+      allow update: if (isMember(companyId) && memberRole(companyId) in ['owner','admin'])
+        || (signedIn() && request.auth.token.email == email
+              && resource.data.status == 'pending'
+              && request.resource.data.status == 'accepted');
+
+      allow delete: if isMember(companyId) && memberRole(companyId) in ['owner','admin'];
+    }
+
+    // ── /companies/{companyId}/{quotations|invoices|...}/{docId} — business data ──
+    match /companies/{companyId}/{collectionId}/{docId} {
+      allow read: if isBusinessCollection(collectionId) && (isMember(companyId) || isSuperAdmin());
+
+      allow create, update: if isBusinessCollection(collectionId)
+        && isMember(companyId)
+        && companyWriteAllowed(companyId)
+        // Company Settings (branding/theme) — owners & admins only.
+        // Everything else — checked against the role/collection matrix above.
+        && (collectionId == 'settings'
+              ? memberRole(companyId) in ['owner','admin']
+              : roleCanWrite(companyId, collectionId));
+
+      allow delete: if isBusinessCollection(collectionId)
+        && isMember(companyId)
+        && companyWriteAllowed(companyId)
+        && memberRole(companyId) in ['owner','admin'];
+    }
+
+    // ── /companies/{companyId}/auditlogs/{logId} — server-side activity trail ──
+    // Any active member may log their own action; only owner/admin can read
+    // the company's full history; entries are immutable once written.
+    match /companies/{companyId}/auditlogs/{logId} {
+      allow read: if isMember(companyId) && memberRole(companyId) in ['owner','admin'];
+      allow create: if isMember(companyId);
+      allow update, delete: if false;
+    }
+
+    // ── /companies/{companyId}/errorlogs/{logId} — client-reported errors ──
+    // Any active member may report an error (so problems are visible even to
+    // support staff); only owner/admin can read the log; nothing is ever
+    // editable/deletable from the client once written.
+    match /companies/{companyId}/errorlogs/{logId} {
+      allow read: if isMember(companyId) && memberRole(companyId) in ['owner','admin'];
+      allow create: if isMember(companyId);
+      allow update, delete: if false;
+    }
+
+    // ── /companies/{companyId}/backups/{backupId} — backup run history ──
+    // Written only by the scheduled Cloud Function via the Admin SDK, which is
+    // not subject to these rules at all — this entry exists purely so owners
+    // can *read* their backup history in-app.
+    match /companies/{companyId}/backups/{backupId} {
+      allow read: if isMember(companyId) && memberRole(companyId) in ['owner','admin'];
+      allow write: if false;
+    }
+
+    // ── /platform/{docId} — platform-wide config (trial length, support contact...) ──
+    // Readable by any signed-in user (needed during registration before a
+    // company exists yet); only Super Admin can change it.
+    match /platform/{docId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // ── /platformAuditLog/{logId} — Super Admin action history (suspend/activate/etc.) ──
+    match /platformAuditLog/{logId} {
+      allow read, create: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    // ── /paymentSubmissions/{subId} — cross-tenant manual payment review queue ──
+    // A company submits its own payment (create); only Super Admin approves/
+    // rejects (update); a company can read only its own submissions, Super
+    // Admin can read all.
+    match /paymentSubmissions/{subId} {
+      allow read: if isSuperAdmin() || (signedIn() && isMember(resource.data.companyId));
+      allow create: if signedIn() && isMember(request.resource.data.companyId) && request.resource.data.status == 'pending';
+      allow update: if isSuperAdmin();
+      allow delete: if false;
+    }
+
+    // ── everything else is denied by default ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
