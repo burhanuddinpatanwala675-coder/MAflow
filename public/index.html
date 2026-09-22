@@ -4163,5 +4163,159 @@ async function confirmVoiceCommand(){
   }
 }
 </script>
+<style>
+.mf-hint{position:fixed;z-index:99999;background:#1B2A4A;color:#FFD54A;border:1px solid #FFD54A;border-radius:4px;padding:1px 4px;font:700 11px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;pointer-events:auto;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.4);user-select:none;white-space:nowrap;transition:opacity .1s;}
+.mf-hint.mf-hint-dim{opacity:.12;}
+.mf-hint-help{position:fixed;left:20px;bottom:20px;z-index:500;width:44px;height:44px;border-radius:50%;background:#1B2A4A;color:#FFD54A;border:none;font-size:17px;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+</style>
+<script>
+/* ── KEYBOARD SHORTCUTS (hint mode) ──────────────────────────────────────
+   Press the backtick key (`) anywhere outside a text field to overlay a
+   short letter code on every clickable button, link-button, row and chip
+   currently visible on screen. Type the code to "click" it. Esc cancels.
+   Also reachable by tapping the floating ⌨ button (bottom-left) for
+   touch/mouse users. This never touches any existing button's markup or
+   handlers — it just finds what's on screen and simulates a real click. */
+(function(){
+  var HINT_CHARS='sadfjklewcmpgh'.split('');
+  var TRIGGER_KEY='`';
+  var active=false, hints=[], typed='', layer=null, mo=null;
+
+  function isEditableTarget(el){
+    if(!el) return false;
+    var tag=(el.tagName||'').toUpperCase();
+    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return true;
+    if(el.isContentEditable) return true;
+    return false;
+  }
+
+  var SELECTOR='button, [onclick]';
+
+  function isVisible(el){
+    var r=el.getBoundingClientRect();
+    if(r.width<=0||r.height<=0) return false;
+    if(r.bottom<0||r.right<0||r.top>window.innerHeight||r.left>window.innerWidth) return false;
+    var style=window.getComputedStyle(el);
+    if(style.visibility==='hidden'||style.display==='none'||parseFloat(style.opacity||'1')===0) return false;
+    var cx=Math.min(Math.max(r.left+r.width/2,0),window.innerWidth-1);
+    var cy=Math.min(Math.max(r.top+r.height/2,0),window.innerHeight-1);
+    var top=document.elementFromPoint(cx,cy);
+    if(!top) return false;
+    return el===top || el.contains(top) || top.contains(el);
+  }
+
+  function collectTargets(){
+    var els=Array.prototype.slice.call(document.querySelectorAll(SELECTOR));
+    var seen=new Set(), out=[];
+    els.forEach(function(el){
+      if(el.closest('#mfHintLayer')) return;
+      if(el.disabled) return;
+      if(seen.has(el)) return;
+      if(!isVisible(el)) return;
+      seen.add(el);
+      out.push(el);
+    });
+    return out;
+  }
+
+  function makeLabels(n){
+    var base=HINT_CHARS.length, len=1;
+    while(Math.pow(base,len)<n) len++;
+    var labels=[];
+    for(var i=0;i<n;i++){
+      var s='', v=i;
+      for(var k=0;k<len;k++){ s=HINT_CHARS[v%base]+s; v=Math.floor(v/base); }
+      labels.push(s);
+    }
+    return labels;
+  }
+
+  function clearHints(){
+    if(layer){ layer.remove(); layer=null; }
+    hints=[]; typed=''; active=false;
+    if(mo){ mo.disconnect(); mo=null; }
+  }
+
+  function showHints(){
+    if(active) return;
+    var targets=collectTargets();
+    if(!targets.length) return;
+    var labels=makeLabels(targets.length);
+    layer=document.createElement('div');
+    layer.id='mfHintLayer';
+    layer.style.cssText='position:fixed;top:0;left:0;width:0;height:0;';
+    document.body.appendChild(layer);
+    hints=targets.map(function(el,i){
+      var r=el.getBoundingClientRect();
+      var badge=document.createElement('div');
+      badge.className='mf-hint';
+      badge.textContent=labels[i].toUpperCase();
+      badge.style.left=Math.max(0,r.left)+'px';
+      badge.style.top=Math.max(0,r.top-2)+'px';
+      badge.addEventListener('mousedown',function(ev){
+        ev.preventDefault(); ev.stopPropagation();
+        el.click();
+        clearHints();
+      });
+      layer.appendChild(badge);
+      return {el:el,label:labels[i],badge:badge};
+    });
+    active=true; typed='';
+    mo=new MutationObserver(function(){ clearHints(); });
+    mo.observe(document.body,{childList:true,subtree:true,attributes:true});
+    window.addEventListener('scroll',clearHints,{capture:true,once:true});
+    window.addEventListener('resize',clearHints,{once:true});
+  }
+
+  function refineHints(){
+    var any=false;
+    hints.forEach(function(h){
+      if(h.label.indexOf(typed)===0){ h.badge.classList.remove('mf-hint-dim'); any=true; }
+      else{ h.badge.classList.add('mf-hint-dim'); }
+    });
+    if(!any){ clearHints(); return; }
+    var exact=hints.filter(function(h){ return h.label===typed; });
+    if(exact.length===1){
+      var el=exact[0].el;
+      clearHints();
+      el.click();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(active){
+      if(e.key==='Escape'){ e.preventDefault(); clearHints(); return; }
+      if(e.key==='Backspace'){ e.preventDefault(); typed=typed.slice(0,-1); refineHints(); return; }
+      if(e.key.length===1 && HINT_CHARS.indexOf(e.key.toLowerCase())!==-1){
+        e.preventDefault();
+        typed+=e.key.toLowerCase();
+        refineHints();
+      }
+      return;
+    }
+    if(e.key===TRIGGER_KEY && !e.ctrlKey && !e.metaKey && !e.altKey){
+      if(isEditableTarget(document.activeElement)) return;
+      e.preventDefault();
+      showHints();
+    }
+  }, true);
+
+  var helpBtn=document.createElement('button');
+  helpBtn.className='mf-hint-help';
+  helpBtn.title='Keyboard shortcuts — press ` to show a letter on every button (Esc to cancel)';
+  helpBtn.textContent='⌨';
+  helpBtn.addEventListener('click', function(){ if(active) clearHints(); else showHints(); });
+  document.body.appendChild(helpBtn);
+
+  try{
+    if(!localStorage.getItem('mf_hint_intro_shown')){
+      localStorage.setItem('mf_hint_intro_shown','1');
+      setTimeout(function(){
+        if(typeof toast==='function') toast('⌨️ Press the ` key anytime to see a shortcut letter on every button');
+      }, 1200);
+    }
+  }catch(e){}
+})();
+</script>
 </body>
 </html>
