@@ -4169,17 +4169,25 @@ async function confirmVoiceCommand(){
 .mf-hint-help{position:fixed;left:20px;bottom:20px;z-index:500;width:44px;height:44px;border-radius:50%;background:#1B2A4A;color:#FFD54A;border:none;font-size:17px;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;}
 </style>
 <script>
-/* ── KEYBOARD SHORTCUTS (hint mode) ──────────────────────────────────────
-   Press the backtick key (`) anywhere outside a text field to overlay a
-   short letter code on every clickable button, link-button, row and chip
-   currently visible on screen. Type the code to "click" it. Esc cancels.
-   Also reachable by tapping the floating ⌨ button (bottom-left) for
-   touch/mouse users. This never touches any existing button's markup or
-   handlers — it just finds what's on screen and simulates a real click. */
+/* ── KEYBOARD SHORTCUTS ───────────────────────────────────────────────────
+   1) Real shortcuts for the most common actions, from anywhere on the page:
+        Ctrl+N  → click the page's "+ New …" button
+        Ctrl+S  → click the "💾 Save …" button in the open form (if any)
+        Ctrl+K  → jump into the "🔍 Search…" box
+        Esc     → close the open modal
+   2) Hint mode for everything else: press the backtick key (`) to overlay a
+      short letter code on every clickable button currently visible on
+      screen. Type the code to "click" it. Esc cancels. Also reachable via
+      the floating ⌨ button (bottom-left) for touch/mouse users.
+   None of this touches any existing button's markup or handlers — it just
+   finds what's on screen and simulates a real click. Hint badges are a
+   one-time snapshot (not auto-cancelled on background data updates), so
+   live Firestore syncing elsewhere on the page can't wipe them out from
+   under you while you type. */
 (function(){
   var HINT_CHARS='sadfjklewcmpgh'.split('');
   var TRIGGER_KEY='`';
-  var active=false, hints=[], typed='', layer=null, mo=null;
+  var active=false, hints=[], typed='', layer=null;
 
   function isEditableTarget(el){
     if(!el) return false;
@@ -4233,7 +4241,6 @@ async function confirmVoiceCommand(){
   function clearHints(){
     if(layer){ layer.remove(); layer=null; }
     hints=[]; typed=''; active=false;
-    if(mo){ mo.disconnect(); mo=null; }
   }
 
   function showHints(){
@@ -4254,17 +4261,23 @@ async function confirmVoiceCommand(){
       badge.style.top=Math.max(0,r.top-2)+'px';
       badge.addEventListener('mousedown',function(ev){
         ev.preventDefault(); ev.stopPropagation();
-        el.click();
+        clickTarget(el);
         clearHints();
       });
       layer.appendChild(badge);
       return {el:el,label:labels[i],badge:badge};
     });
     active=true; typed='';
-    mo=new MutationObserver(function(){ clearHints(); });
-    mo.observe(document.body,{childList:true,subtree:true,attributes:true});
     window.addEventListener('scroll',clearHints,{capture:true,once:true});
     window.addEventListener('resize',clearHints,{once:true});
+  }
+
+  function clickTarget(el){
+    if(!el || !el.isConnected){
+      if(typeof toast==='function') toast('That moved — press ` again');
+      return;
+    }
+    el.click();
   }
 
   function refineHints(){
@@ -4278,8 +4291,39 @@ async function confirmVoiceCommand(){
     if(exact.length===1){
       var el=exact[0].el;
       clearHints();
-      el.click();
+      clickTarget(el);
     }
+  }
+
+  /* ---- real Ctrl+key shortcuts ---- */
+  function topModalScope(){
+    if(typeof _mods!=='undefined' && _mods && _mods.length) return _mods[_mods.length-1];
+    return document;
+  }
+
+  function findNewButton(){
+    var btns=Array.prototype.slice.call(document.querySelectorAll(SELECTOR));
+    for(var i=0;i<btns.length;i++){
+      var t=(btns[i].textContent||'').trim();
+      if(t.indexOf('+ New')===0 && isVisible(btns[i])) return btns[i];
+    }
+    return null;
+  }
+
+  function findSaveButton(){
+    var scope=topModalScope();
+    var btns=Array.prototype.slice.call(scope.querySelectorAll(SELECTOR));
+    for(var i=0;i<btns.length;i++){
+      var t=btns[i].textContent||'';
+      if(t.indexOf('💾')!==-1 && isVisible(btns[i])) return btns[i];
+    }
+    return null;
+  }
+
+  function focusSearch(){
+    var el=document.getElementById('srch');
+    if(el && isVisible(el)){ el.focus(); el.select&&el.select(); return true; }
+    return false;
   }
 
   document.addEventListener('keydown',function(e){
@@ -4293,6 +4337,26 @@ async function confirmVoiceCommand(){
       }
       return;
     }
+
+    if((e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase()==='n'){
+      var nb=findNewButton();
+      if(nb){ e.preventDefault(); clickTarget(nb); }
+      return;
+    }
+    if((e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase()==='s'){
+      var sb=findSaveButton();
+      if(sb){ e.preventDefault(); clickTarget(sb); }
+      return;
+    }
+    if((e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase()==='k'){
+      if(focusSearch()) e.preventDefault();
+      return;
+    }
+    if(e.key==='Escape' && !isEditableTarget(document.activeElement)){
+      if(typeof _mods!=='undefined' && _mods && _mods.length){ e.preventDefault(); closeMod(); }
+      return;
+    }
+
     if(e.key===TRIGGER_KEY && !e.ctrlKey && !e.metaKey && !e.altKey){
       if(isEditableTarget(document.activeElement)) return;
       e.preventDefault();
@@ -4302,16 +4366,16 @@ async function confirmVoiceCommand(){
 
   var helpBtn=document.createElement('button');
   helpBtn.className='mf-hint-help';
-  helpBtn.title='Keyboard shortcuts — press ` to show a letter on every button (Esc to cancel)';
+  helpBtn.title='Keyboard shortcuts — Ctrl+N New, Ctrl+S Save, Ctrl+K Search, Esc Close.\nPress ` for a letter on every button.';
   helpBtn.textContent='⌨';
   helpBtn.addEventListener('click', function(){ if(active) clearHints(); else showHints(); });
   document.body.appendChild(helpBtn);
 
   try{
-    if(!localStorage.getItem('mf_hint_intro_shown')){
-      localStorage.setItem('mf_hint_intro_shown','1');
+    if(!localStorage.getItem('mf_hint_intro_shown_v2')){
+      localStorage.setItem('mf_hint_intro_shown_v2','1');
       setTimeout(function(){
-        if(typeof toast==='function') toast('⌨️ Press the ` key anytime to see a shortcut letter on every button');
+        if(typeof toast==='function') toast('⌨️ Ctrl+N New · Ctrl+S Save · Ctrl+K Search · press ` for every button');
       }, 1200);
     }
   }catch(e){}
