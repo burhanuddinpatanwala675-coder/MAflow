@@ -4170,14 +4170,19 @@ async function confirmVoiceCommand(){
 </style>
 <script>
 /* ── KEYBOARD SHORTCUTS ───────────────────────────────────────────────────
-   1) Real shortcuts for the most common actions, from anywhere on the page:
-        Ctrl+N   → click the page's "+ New …" button
-        Ctrl+S   → click the "💾 Save …" button in the open form (if any)
-        Ctrl+K   → jump into the "🔍 Search…" box
+   1) Real shortcuts for the most common actions, from anywhere on the page
+      (only when you're not typing in a text field, so Shift+letter still
+      types capitals normally inside forms):
+        Shift+N  → click the page's "+ New …" button
+        Shift+S  → click the "💾 Save …" button in the open form (if any)
+        Shift+K  → jump into the "🔍 Search…" box
         Alt+1..9 → jump straight to the Nth top nav tab (Dashboard,
                    Quotations, Challans, … in whatever order they show for
                    your role)
         Esc      → close the open modal
+      (Ctrl+N/S/K were tried first, but Chrome reserves Ctrl+N — and often
+      Ctrl+S — for its own new-window/save-page actions and won't let a
+      page override them, which is why they didn't fire reliably.)
    2) Hint mode for everything else: press the backtick key (`) to overlay a
       short letter code on every clickable button currently visible on
       screen. Type the code to "click" it. Esc cancels. Also reachable via
@@ -4298,7 +4303,7 @@ async function confirmVoiceCommand(){
     }
   }
 
-  /* ---- real Ctrl+key shortcuts ---- */
+  /* ---- real Shift+key shortcuts ---- */
   function topModalScope(){
     if(typeof _mods!=='undefined' && _mods && _mods.length) return _mods[_mods.length-1];
     return document;
@@ -4347,17 +4352,17 @@ async function confirmVoiceCommand(){
       return;
     }
 
-    if((e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase()==='n'){
+    if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase()==='n' && !isEditableTarget(document.activeElement)){
       var nb=findNewButton();
       if(nb){ e.preventDefault(); clickTarget(nb); }
       return;
     }
-    if((e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase()==='s'){
+    if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase()==='s' && !isEditableTarget(document.activeElement)){
       var sb=findSaveButton();
       if(sb){ e.preventDefault(); clickTarget(sb); }
       return;
     }
-    if((e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase()==='k'){
+    if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase()==='k' && !isEditableTarget(document.activeElement)){
       if(focusSearch()) e.preventDefault();
       return;
     }
@@ -4380,16 +4385,16 @@ async function confirmVoiceCommand(){
 
   var helpBtn=document.createElement('button');
   helpBtn.className='mf-hint-help';
-  helpBtn.title='Keyboard shortcuts — Ctrl+N New, Ctrl+S Save, Ctrl+K Search, Alt+1..9 nav tabs, Esc Close.\nPress ` for a letter on every button.';
+  helpBtn.title='Keyboard shortcuts — Shift+N New, Shift+S Save, Shift+K Search, Alt+1..9 nav tabs, Esc Close.\nPress ` for a letter on every button.';
   helpBtn.textContent='⌨';
   helpBtn.addEventListener('click', function(){ if(active) clearHints(); else showHints(); });
   document.body.appendChild(helpBtn);
 
   try{
-    if(!localStorage.getItem('mf_hint_intro_shown_v3')){
-      localStorage.setItem('mf_hint_intro_shown_v3','1');
+    if(!localStorage.getItem('mf_hint_intro_shown_v4')){
+      localStorage.setItem('mf_hint_intro_shown_v4','1');
       setTimeout(function(){
-        if(typeof toast==='function') toast('⌨️ Ctrl+N New · Ctrl+S Save · Ctrl+K Search · Alt+1‑9 tabs · press ` for every button');
+        if(typeof toast==='function') toast('⌨️ Shift+N New · Shift+S Save · Shift+K Search · Alt+1‑9 tabs · press ` for every button');
       }, 1200);
     }
   }catch(e){}
