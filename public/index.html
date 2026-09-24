@@ -4171,10 +4171,13 @@ async function confirmVoiceCommand(){
 <script>
 /* ── KEYBOARD SHORTCUTS ───────────────────────────────────────────────────
    1) Real shortcuts for the most common actions, from anywhere on the page:
-        Ctrl+N  → click the page's "+ New …" button
-        Ctrl+S  → click the "💾 Save …" button in the open form (if any)
-        Ctrl+K  → jump into the "🔍 Search…" box
-        Esc     → close the open modal
+        Ctrl+N   → click the page's "+ New …" button
+        Ctrl+S   → click the "💾 Save …" button in the open form (if any)
+        Ctrl+K   → jump into the "🔍 Search…" box
+        Alt+1..9 → jump straight to the Nth top nav tab (Dashboard,
+                   Quotations, Challans, … in whatever order they show for
+                   your role)
+        Esc      → close the open modal
    2) Hint mode for everything else: press the backtick key (`) to overlay a
       short letter code on every clickable button currently visible on
       screen. Type the code to "click" it. Esc cancels. Also reachable via
@@ -4326,6 +4329,12 @@ async function confirmVoiceCommand(){
     return false;
   }
 
+  function goToNavTab(n){
+    var tabs=Array.prototype.slice.call(document.querySelectorAll('#navTabs .nav-tab'));
+    tabs=tabs.filter(isVisible);
+    return tabs[n-1]||null;
+  }
+
   document.addEventListener('keydown',function(e){
     if(active){
       if(e.key==='Escape'){ e.preventDefault(); clearHints(); return; }
@@ -4352,6 +4361,11 @@ async function confirmVoiceCommand(){
       if(focusSearch()) e.preventDefault();
       return;
     }
+    if(e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^[1-9]$/.test(e.key)){
+      var navBtn=goToNavTab(parseInt(e.key,10));
+      if(navBtn){ e.preventDefault(); clickTarget(navBtn); }
+      return;
+    }
     if(e.key==='Escape' && !isEditableTarget(document.activeElement)){
       if(typeof _mods!=='undefined' && _mods && _mods.length){ e.preventDefault(); closeMod(); }
       return;
@@ -4366,16 +4380,16 @@ async function confirmVoiceCommand(){
 
   var helpBtn=document.createElement('button');
   helpBtn.className='mf-hint-help';
-  helpBtn.title='Keyboard shortcuts — Ctrl+N New, Ctrl+S Save, Ctrl+K Search, Esc Close.\nPress ` for a letter on every button.';
+  helpBtn.title='Keyboard shortcuts — Ctrl+N New, Ctrl+S Save, Ctrl+K Search, Alt+1..9 nav tabs, Esc Close.\nPress ` for a letter on every button.';
   helpBtn.textContent='⌨';
   helpBtn.addEventListener('click', function(){ if(active) clearHints(); else showHints(); });
   document.body.appendChild(helpBtn);
 
   try{
-    if(!localStorage.getItem('mf_hint_intro_shown_v2')){
-      localStorage.setItem('mf_hint_intro_shown_v2','1');
+    if(!localStorage.getItem('mf_hint_intro_shown_v3')){
+      localStorage.setItem('mf_hint_intro_shown_v3','1');
       setTimeout(function(){
-        if(typeof toast==='function') toast('⌨️ Ctrl+N New · Ctrl+S Save · Ctrl+K Search · press ` for every button');
+        if(typeof toast==='function') toast('⌨️ Ctrl+N New · Ctrl+S Save · Ctrl+K Search · Alt+1‑9 tabs · press ` for every button');
       }, 1200);
     }
   }catch(e){}
