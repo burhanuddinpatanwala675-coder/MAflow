@@ -140,6 +140,17 @@ service cloud.firestore {
       allow delete: if (isMember(companyId) && memberRole(companyId) == 'owner' && memberId != request.auth.uid) || isSuperAdmin();
     }
 
+    // ── /companies/{companyId}/settings/{settingsId} — branding/theme, read path ──
+    // Explicit literal-path read rule (mirrors the /members/ rule above) so the
+    // Super Admin portal can collectionGroup('settings') across every company —
+    // e.g. to show each company's contact phone number on the Companies tab.
+    // Writes to this subcollection are still governed by the generic business-
+    // collection rule further below (owner/admin only); this block only adds
+    // a read path and narrows nothing.
+    match /companies/{companyId}/settings/{settingsId} {
+      allow read: if isMember(companyId) || isSuperAdmin();
+    }
+
     // ── /companies/{companyId}/invites/{email} — pending team invitations ──
     // Keyed by the invitee's lowercased email so both the owner (creating it)
     // and the invitee (reading/accepting it) can reach it by direct path —
