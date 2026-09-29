@@ -2032,6 +2032,15 @@ function openRoleSettings() {
   `);
 }
 const fmt=n=>`${getBrand().currency||'PKR'} ${Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+// Multi-currency helpers: fmtCur formats an amount in an EXPLICIT currency (falls back to
+// company base currency when none given); fmtDoc formats a document's own total in its own
+// currency; docBase returns a document's amount converted to the company base currency (for
+// summing across documents that may be in different currencies) — old documents saved before
+// this feature existed have no totalBase, so they fall back to their plain total (they were
+// always in the base currency anyway).
+const fmtCur=(n,cur)=>`${cur||getBrand().currency||'PKR'} ${Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const fmtDoc=d=>fmtCur((d&&d.total)||0,d&&d.currency);
+const docBase=d=>(d&&d.totalBase!=null&&d.totalBase!=='')?(+d.totalBase||0):(+((d&&d.total)||0));
 const fmtNum=n=>Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtD=d=>{
   if(!d)return'—';
@@ -2163,6 +2172,7 @@ function printDoc(doc2,type){
 
 function buildPrint(doc2,type,subtotal,discountAmt,taxAmt,total,isChallan){
   const CO=BRAND();
+  const pCur=doc2.currency||getBrand().currency||'PKR';
   const printLogo=CO.logo?`<img src="${CO.logo}" style="width:56px;height:56px;object-fit:contain;border-radius:8px;">`:defaultLogoSVG(56);
   const isHSDoc=['SALES TAX INVOICE','COMMERCIAL BILL'].includes(type);
   // FIX #5: Build signature section based on settings
@@ -2203,17 +2213,17 @@ function buildPrint(doc2,type,subtotal,discountAmt,taxAmt,total,isChallan){
     const amt=(+it.qty||0)*(+it.rate||0);
     const bg=i%2===0?'#fff':'#F7F9FC';
     if(isChallan)return`<tr style="background:${bg};"><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${i+1}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${esc(it.description)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.unit)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;font-weight:700;">${it.qty}</td></tr>`;
-    if(isHSDoc)return`<tr style="background:${bg};"><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${i+1}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${esc(it.description)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.hsCode||'')}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.unit)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${it.qty}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${fmt(it.rate)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;font-weight:700;">${fmt(amt)}</td></tr>`;
-    return`<tr style="background:${bg};"><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${i+1}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${esc(it.description)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.unit)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${it.qty}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${fmt(it.rate)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;font-weight:700;">${fmt(amt)}</td></tr>`;
+    if(isHSDoc)return`<tr style="background:${bg};"><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${i+1}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${esc(it.description)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.hsCode||'')}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.unit)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${it.qty}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${fmtCur(it.rate,pCur)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;font-weight:700;">${fmtCur(amt,pCur)}</td></tr>`;
+    return`<tr style="background:${bg};"><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${i+1}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;">${esc(it.description)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:center;">${esc(it.unit)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${it.qty}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;">${fmtCur(it.rate,pCur)}</td><td style="padding:9px 10px;border-bottom:1px solid #D5DCE8;text-align:right;font-weight:700;">${fmtCur(amt,pCur)}</td></tr>`;
   }).join('');
 
   const totBlock=isChallan?'':`
     <div style="display:flex;justify-content:flex-end;margin-top:16px;">
       <div style="min-width:260px;">
-        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6B7A99;margin-bottom:5px;"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
-        ${doc2.discount>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#6B7A99;margin-bottom:5px;"><span>Discount (${doc2.discount}%)</span><span>-${fmt(discountAmt)}</span></div>`:''}
-        ${doc2.taxRate>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#6B7A99;margin-bottom:5px;"><span>GST (${doc2.taxRate}%)</span><span>${fmt(taxAmt)}</span></div>`:''}
-        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:17px;color:#fff;background:#0A1628;padding:11px 14px;border-radius:8px;margin-top:8px;"><span>TOTAL</span><span>${fmt(total)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6B7A99;margin-bottom:5px;"><span>Subtotal</span><span>${fmtCur(subtotal,pCur)}</span></div>
+        ${doc2.discount>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#6B7A99;margin-bottom:5px;"><span>Discount (${doc2.discount}%)</span><span>-${fmtCur(discountAmt,pCur)}</span></div>`:''}
+        ${doc2.taxRate>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#6B7A99;margin-bottom:5px;"><span>GST (${doc2.taxRate}%)</span><span>${fmtCur(taxAmt,pCur)}</span></div>`:''}
+        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:17px;color:#fff;background:#0A1628;padding:11px 14px;border-radius:8px;margin-top:8px;"><span>TOTAL</span><span>${fmtCur(total,pCur)}</span></div>
       </div>
     </div>`;
 
@@ -2368,6 +2378,16 @@ function getRows(){
   });
 }
 
+function onCurrencyChange(){
+  const cur=document.getElementById('fCurrency')?.value||getBrand().currency||'PKR';
+  const baseCur=getBrand().currency||'PKR';
+  const wrap=document.getElementById('fExRateWrap');
+  if(wrap)wrap.style.display=(cur!==baseCur)?'':'none';
+  const lbl=document.querySelector('#fExRateWrap .lbl');
+  if(lbl)lbl.textContent=`Exchange Rate (1 ${cur} = ? ${baseCur})`;
+  document.querySelectorAll('.curLbl').forEach(e=>e.textContent=cur);
+}
+
 function recalc(){
   const isChallan=_formType==='Challan';
   const showHS=['SalesTaxInvoice','CommercialBill'].includes(_formType);
@@ -2411,6 +2431,9 @@ function docFormHTML(type,doc2){
   const showChips=['Invoice','SalesTaxInvoice','CommercialBill'].includes(type);
   const chips=showChips?db.challans.filter(c=>c.status!=='Invoiced').map(c=>`<span class="chip${(d.linkedChallanIds||[]).includes(c.id)?' on':''}" onclick="toggleChip('${c.id}',this)">${esc(c.number)} — ${esc(c.customerName)}</span>`).join(''):'' ;
   const{subtotal,discountAmt,taxAmt,total}=calcDoc(d.items,d.taxRate,d.discount);
+  const baseCur=getBrand().currency||'PKR';
+  const docCur=d.currency||baseCur;
+  const showRate=docCur!==baseCur;
 
   // Challan form: no rate/tax/discount fields
   const detailFields=isChallan?`
@@ -2428,6 +2451,8 @@ function docFormHTML(type,doc2){
       <div class="fld"><label class="lbl">${type==='Quotation'?'Valid Till':'Due Date'}</label><input type="date" class="inp" id="fDue" value="${esc(d.dueDate||'')}"></div>
       <div class="fld"><label class="lbl">Tax Rate</label><select class="inp" id="fTaxRate" onchange="recalc()">${TAX_OPT.map(t=>`<option value="${t}"${d.taxRate==t?' selected':''}>${t===0?'0% (Tax Free)':t+'% GST'}</option>`).join('')}</select></div>
       <div class="fld"><label class="lbl">Discount %</label><input type="number" class="inp" id="fDiscount" value="${d.discount||0}" min="0" max="100" oninput="recalc()"></div>
+      <div class="fld"><label class="lbl">Currency</label><select class="inp" id="fCurrency" onchange="onCurrencyChange()">${CURRENCIES.map(c=>`<option${docCur===c?' selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fld" id="fExRateWrap" style="${showRate?'':'display:none'}"><label class="lbl">Exchange Rate (1 ${docCur} = ? ${baseCur})</label><input type="number" class="inp" id="fExRate" value="${d.exRate||1}" min="0" step="0.0001" oninput="recalc()"></div>
       <div class="fld"><label class="lbl">Status</label><select class="inp" id="fStatus">${STATUS[type].map(s=>`<option${d.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
     </div>`;
 
@@ -2438,10 +2463,10 @@ function docFormHTML(type,doc2){
   const totalsBlock=isChallan?'':`
     <div style="display:flex;justify-content:flex-end;margin-top:14px;">
       <div class="totbox">
-        <div class="totr"><span>Subtotal</span><span>PKR <span id="tSub">${fmtNum(subtotal)}</span></span></div>
-        <div class="totr" id="tDR" style="${d.discount>0?'':'display:none'}"><span>Discount %</span><span>-PKR <span id="tDisc">${fmtNum(discountAmt)}</span></span></div>
-        <div class="totr" id="tTR" style="${d.taxRate>0?'':'display:none'}"><span>GST (<span id="tTaxPct">${d.taxRate}</span>%)</span><span>PKR <span id="tTax">${fmtNum(taxAmt)}</span></span></div>
-        <div class="tott"><span>TOTAL</span><span>PKR <span id="tTot">${fmtNum(total)}</span></span></div>
+        <div class="totr"><span>Subtotal</span><span><span class="curLbl">${docCur}</span> <span id="tSub">${fmtNum(subtotal)}</span></span></div>
+        <div class="totr" id="tDR" style="${d.discount>0?'':'display:none'}"><span>Discount %</span><span>-<span class="curLbl">${docCur}</span> <span id="tDisc">${fmtNum(discountAmt)}</span></span></div>
+        <div class="totr" id="tTR" style="${d.taxRate>0?'':'display:none'}"><span>GST (<span id="tTaxPct">${d.taxRate}</span>%)</span><span><span class="curLbl">${docCur}</span> <span id="tTax">${fmtNum(taxAmt)}</span></span></div>
+        <div class="tott"><span>TOTAL</span><span><span class="curLbl">${docCur}</span> <span id="tTot">${fmtNum(total)}</span></span></div>
       </div>
     </div>`;
 
@@ -2513,6 +2538,10 @@ async function saveForm(type){
   const disc=isChallan?0:parseFloat(g('fDiscount'))||0;
   const{subtotal,discountAmt,taxAmt,total}=calcDoc(rows,tax,disc);
   const chips=Array.from(document.querySelectorAll('#cChips .chip.on')).map(el=>{const m=el.getAttribute('onclick').match(/'([^']+)'/);return m?m[1]:null;}).filter(Boolean);
+  const baseCur=getBrand().currency||'PKR';
+  const currency=isChallan?baseCur:(g('fCurrency')||baseCur);
+  const exRate=(isChallan||currency===baseCur)?1:(parseFloat(g('fExRate'))||1);
+  const totalBase=+(total*exRate).toFixed(2);
   const doc2={id:g('fId'),number:g('fNum'),type,date:g('fDate'),dueDate:isChallan?'':g('fDue'),
     customerName:cleanText(g('fCustName')),customerAddress:cleanText(g('fCustAddr')),
     customerPhone:cleanText(g('fCustPhone')),customerNTN:cleanText(g('fCustNTN')),
@@ -2520,7 +2549,7 @@ async function saveForm(type){
     driver:cleanText(g('fDriver')||''),vehicle:cleanText(g('fVehicle')||''),
     dispatchDate:g('fDispDate')||'',linkedChallanIds:chips,
     items:rows.map(r=>({...r,description:cleanText(r.description),unit:cleanText(r.unit)})),
-    subtotal,discountAmt,taxAmt,total,updatedAt:new Date().toISOString()};
+    subtotal,discountAmt,taxAmt,total,currency,exRate,totalBase,updatedAt:new Date().toISOString()};
   const key={Quotation:'quotations',Challan:'challans',Invoice:'invoices',SalesTaxInvoice:'salestaxinvoices',CommercialBill:'commercialbills'}[type];
   const old=db[key]?.find(x=>x.id===doc2.id);
   // Only now (a real save) do we consume/advance the document number counter —
@@ -2532,7 +2561,7 @@ async function saveForm(type){
   if(!ok){ handleStockChange(key, old||{status:'__none__'}, doc2); return; } // save failed — undo the local stock adjustment, leave the form open so nothing looks saved when it wasn't
   autoAddNewProducts(doc2.items,'rate'); // any typed item that isn't already in the catalog gets added automatically
   // FIX #3: audit log
-  addAudit(old?'EDIT':'CREATE', key, doc2.number, `Status: ${doc2.status}, Total: ${fmt(doc2.total)}`);
+  addAudit(old?'EDIT':'CREATE', key, doc2.number, `Status: ${doc2.status}, Total: ${fmtDoc(doc2)}`);
   if(['Invoice','SalesTaxInvoice','CommercialBill'].includes(type)&&chips.length){for(const id of chips){const idx=db.challans.findIndex(c=>c.id===id);if(idx>=0){db.challans[idx].status='Invoiced';await window.FSAVE('challans',db.challans[idx]);}}}
   toast('✅ Saved!');
   closeAllMods();renderApp();
@@ -2550,6 +2579,7 @@ function printFormNow(type){
     customerPhone:cleanText(g('fCustPhone')),customerNTN:cleanText(g('fCustNTN')||''),driver:cleanText(g('fDriver')||''),
     vehicle:cleanText(g('fVehicle')||''),dispatchDate:g('fDispDate')||'',
     taxRate:tax,discount:disc,notes:cleanText(g('fNotes')),
+    currency:isChallan?'':(g('fCurrency')||''),
     items:rows.map(r=>({...r,description:cleanText(r.description)})),
     subtotal,discountAmt,taxAmt,total},printType);
 }
@@ -2702,7 +2732,7 @@ function docList(type){
         <td style="font-weight:700;color:var(--navy);">${esc(d.number)}</td>
         <td>${esc(cleanText(d.customerName||d.supplierName||'—'))}</td>
         <td>${fmtD(d.date)}</td>
-        <td style="font-weight:700;">${fmt(d.total||0)}</td>
+        <td style="font-weight:700;">${fmtDoc(d)}</td>
         <td><span class="bdg bg-${bColor(d.status)}">${esc(d.status)}</span></td>
         <td><div style="display:flex;gap:5px;flex-wrap:wrap;">
           <button class="btn bo bs" onclick="docAction('edit','${key}','${d.id}','${type}')">✏️ Edit</button>
@@ -2748,10 +2778,10 @@ function renderDash(){
   // plain "Invoice" type. A company that only ever creates Sales Tax Invoices or
   // Commercial Bills (common for FBR-registered businesses) still has real sales.
   const allSalesDocs=[...inv,...(db.salestaxinvoices||[]),...(db.commercialbills||[])];
-  const tSales=allSalesDocs.reduce((s,i)=>s+(+i.total||0),0);
+  const tSales=allSalesDocs.reduce((s,i)=>s+docBase(i),0);
   const tPaid=pmts.filter(p=>p.type==='received').reduce((s,p)=>s+(+p.amount||0),0);
   const unpaid=allSalesDocs.filter(i=>i.status==='Unpaid');
-  const tPend=unpaid.reduce((s,i)=>s+(+i.total||0),0);
+  const tPend=unpaid.reduce((s,i)=>s+docBase(i),0);
   const pDel=chal.filter(c=>c.status==='Pending'||c.status==='Dispatched').length;
   const recent=[...inv.map(d=>({...d,_t:'Invoice'})),...chal.map(d=>({...d,_t:'Challan'})),...quot.map(d=>({...d,_t:'Quotation'})),...(db.salestaxinvoices||[]).map(d=>({...d,_t:'STI'})),...(db.commercialbills||[]).map(d=>({...d,_t:'CB'}))].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,8);
   const low=prods.filter(p=>(+p.stock||0)<=(+p.minStock||5));
@@ -2789,7 +2819,7 @@ function renderDash(){
       </div>
     </div>
     <div class="card"><div class="ct">📄 Recent Documents</div>
-      ${recent.length===0?`<div class="empty"><div class="ei">📂</div><p>No documents yet. Create your first!</p></div>`:`<div class="tw"><table><thead><tr><th>TYPE</th><th>NUMBER</th><th>CUSTOMER</th><th>DATE</th><th>AMOUNT</th><th>STATUS</th></tr></thead><tbody>${recent.map(d=>`<tr><td><span class="bdg bg-${d._t==='Invoice'||d._t==='STI'?'blue':d._t==='Challan'?'yellow':d._t==='CB'?'gray':'green'}">${d._t}</span></td><td style="font-weight:700;">${esc(d.number)}</td><td>${esc(cleanText(d.customerName||'—'))}</td><td>${fmtD(d.date)}</td><td style="font-weight:700;">${fmt(d.total||0)}</td><td><span class="bdg bg-${bColor(d.status)}">${esc(d.status||'Draft')}</span></td></tr>`).join('')}</tbody></table></div>`}
+      ${recent.length===0?`<div class="empty"><div class="ei">📂</div><p>No documents yet. Create your first!</p></div>`:`<div class="tw"><table><thead><tr><th>TYPE</th><th>NUMBER</th><th>CUSTOMER</th><th>DATE</th><th>AMOUNT</th><th>STATUS</th></tr></thead><tbody>${recent.map(d=>`<tr><td><span class="bdg bg-${d._t==='Invoice'||d._t==='STI'?'blue':d._t==='Challan'?'yellow':d._t==='CB'?'gray':'green'}">${d._t}</span></td><td style="font-weight:700;">${esc(d.number)}</td><td>${esc(cleanText(d.customerName||'—'))}</td><td>${fmtD(d.date)}</td><td style="font-weight:700;">${fmtDoc(d)}</td><td><span class="bdg bg-${bColor(d.status)}">${esc(d.status||'Draft')}</span></td></tr>`).join('')}</tbody></table></div>`}
     </div>
   </div>`;
 }
@@ -2888,7 +2918,7 @@ async function savePmt(){if(!requirePerm('payments','write'))return;const amt=pa
 
 // ═══ REPORTS ═══
 let _rp='month';
-function renderReports(){const db=window.DB||STATE;const inv=[...(db.invoices||[]),...(db.salestaxinvoices||[]),...(db.commercialbills||[])],chal=db.challans||[],prods=db.products||[],custs=db.customers||[];const now=new Date();const filt=docs=>docs.filter(d=>{const dd=new Date(d.date+'T00:00:00');if(_rp==='today')return dd.toDateString()===now.toDateString();if(_rp==='week')return(now-dd)<=7*86400000;if(_rp==='month')return dd.getMonth()===now.getMonth()&&dd.getFullYear()===now.getFullYear();if(_rp==='year')return dd.getFullYear()===now.getFullYear();return true;});const fi=filt(inv);const ts=fi.reduce((s,i)=>s+(+i.total||0),0);const unp=inv.filter(i=>i.status==='Unpaid');const ut=unp.reduce((s,i)=>s+(+i.total||0),0);const ls=prods.filter(p=>(+p.stock||0)<=(+p.minStock||5));const rec=custs.map(c=>{const due=inv.filter(i=>i.customerName===c.name&&i.status!=='Paid').reduce((s,i)=>s+(+i.total||0),0);return{...c,due};}).filter(c=>c.due>0).sort((a,b)=>b.due-a.due);return`<div class="page"><div class="ph"><div><div class="pt">📊 Reports</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;">${[['today','Today'],['week','This Week'],['month','This Month'],['year','This Year'],['all','All Time']].map(([v,l])=>`<button class="btn bs ${_rp===v?'bp':'bo'}" onclick="_rp='${v}';renderApp();">${l}</button>`).join('')}</div></div><div class="g4" style="margin-bottom:14px;"><div class="stat" style="background:var(--navy);"><div class="sn" style="font-size:18px;">${fmt(ts)}</div><div class="sl">Total Sales</div></div><div class="stat" style="background:#2980B9;"><div class="sn">${fi.length}</div><div class="sl">Sales Docs Made</div></div><div class="stat" style="background:var(--red);"><div class="sn" style="font-size:18px;">${fmt(ut)}</div><div class="sl">Total Unpaid</div></div><div class="stat" style="background:var(--gold);"><div class="sn">${filt(chal).length}</div><div class="sl">Challans Sent</div></div></div><div class="g2"><div class="card"><div class="ct">💳 Receivables</div>${rec.length===0?`<div style="color:var(--green);font-size:13px;">✅ No outstanding!</div>`:`<div class="tw"><table><thead><tr><th>CUSTOMER</th><th>AMOUNT DUE</th></tr></thead><tbody>${rec.map(r=>`<tr><td style="font-weight:700;">${esc(r.name)}</td><td style="font-weight:700;color:var(--red);">${fmt(r.due)}</td></tr>`).join('')}</tbody></table></div>`}</div><div class="card"><div class="ct">📦 Low Stock</div>${ls.length===0?`<div style="color:var(--green);font-size:13px;">✅ All stock good!</div>`:`<div class="tw"><table><thead><tr><th>PRODUCT</th><th>STOCK</th><th>MIN</th></tr></thead><tbody>${ls.map(p=>`<tr><td style="font-weight:700;">${esc(p.name)}</td><td style="color:var(--red);font-weight:700;">${p.stock||0}</td><td>${p.minStock||5}</td></tr>`).join('')}</tbody></table></div>`}</div></div><div class="card"><div class="ct">🧾 Unpaid Sales Documents</div>${unp.length===0?`<div style="color:var(--green);font-size:13px;">✅ All paid!</div>`:`<div class="tw"><table><thead><tr><th>DOC NO</th><th>CUSTOMER</th><th>DATE</th><th>DUE DATE</th><th>AMOUNT</th></tr></thead><tbody>${unp.map(i=>`<tr><td style="font-weight:700;">${esc(i.number)}</td><td>${esc(cleanText(i.customerName||''))}</td><td>${fmtD(i.date)}</td><td style="color:${i.dueDate&&new Date(i.dueDate)<now?'var(--red)':'inherit'};">${fmtD(i.dueDate)}</td><td style="font-weight:700;color:var(--red);">${fmt(i.total)}</td></tr>`).join('')}</tbody></table></div>`}</div></div>`;}
+function renderReports(){const db=window.DB||STATE;const inv=[...(db.invoices||[]),...(db.salestaxinvoices||[]),...(db.commercialbills||[])],chal=db.challans||[],prods=db.products||[],custs=db.customers||[];const now=new Date();const filt=docs=>docs.filter(d=>{const dd=new Date(d.date+'T00:00:00');if(_rp==='today')return dd.toDateString()===now.toDateString();if(_rp==='week')return(now-dd)<=7*86400000;if(_rp==='month')return dd.getMonth()===now.getMonth()&&dd.getFullYear()===now.getFullYear();if(_rp==='year')return dd.getFullYear()===now.getFullYear();return true;});const fi=filt(inv);const ts=fi.reduce((s,i)=>s+docBase(i),0);const unp=inv.filter(i=>i.status==='Unpaid');const ut=unp.reduce((s,i)=>s+docBase(i),0);const ls=prods.filter(p=>(+p.stock||0)<=(+p.minStock||5));const rec=custs.map(c=>{const due=inv.filter(i=>i.customerName===c.name&&i.status!=='Paid').reduce((s,i)=>s+docBase(i),0);return{...c,due};}).filter(c=>c.due>0).sort((a,b)=>b.due-a.due);return`<div class="page"><div class="ph"><div><div class="pt">📊 Reports</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;">${[['today','Today'],['week','This Week'],['month','This Month'],['year','This Year'],['all','All Time']].map(([v,l])=>`<button class="btn bs ${_rp===v?'bp':'bo'}" onclick="_rp='${v}';renderApp();">${l}</button>`).join('')}</div></div><div class="g4" style="margin-bottom:14px;"><div class="stat" style="background:var(--navy);"><div class="sn" style="font-size:18px;">${fmt(ts)}</div><div class="sl">Total Sales</div></div><div class="stat" style="background:#2980B9;"><div class="sn">${fi.length}</div><div class="sl">Sales Docs Made</div></div><div class="stat" style="background:var(--red);"><div class="sn" style="font-size:18px;">${fmt(ut)}</div><div class="sl">Total Unpaid</div></div><div class="stat" style="background:var(--gold);"><div class="sn">${filt(chal).length}</div><div class="sl">Challans Sent</div></div></div><div class="g2"><div class="card"><div class="ct">💳 Receivables</div>${rec.length===0?`<div style="color:var(--green);font-size:13px;">✅ No outstanding!</div>`:`<div class="tw"><table><thead><tr><th>CUSTOMER</th><th>AMOUNT DUE</th></tr></thead><tbody>${rec.map(r=>`<tr><td style="font-weight:700;">${esc(r.name)}</td><td style="font-weight:700;color:var(--red);">${fmt(r.due)}</td></tr>`).join('')}</tbody></table></div>`}</div><div class="card"><div class="ct">📦 Low Stock</div>${ls.length===0?`<div style="color:var(--green);font-size:13px;">✅ All stock good!</div>`:`<div class="tw"><table><thead><tr><th>PRODUCT</th><th>STOCK</th><th>MIN</th></tr></thead><tbody>${ls.map(p=>`<tr><td style="font-weight:700;">${esc(p.name)}</td><td style="color:var(--red);font-weight:700;">${p.stock||0}</td><td>${p.minStock||5}</td></tr>`).join('')}</tbody></table></div>`}</div></div><div class="card"><div class="ct">🧾 Unpaid Sales Documents</div>${unp.length===0?`<div style="color:var(--green);font-size:13px;">✅ All paid!</div>`:`<div class="tw"><table><thead><tr><th>DOC NO</th><th>CUSTOMER</th><th>DATE</th><th>DUE DATE</th><th>AMOUNT</th></tr></thead><tbody>${unp.map(i=>`<tr><td style="font-weight:700;">${esc(i.number)}</td><td>${esc(cleanText(i.customerName||''))}</td><td>${fmtD(i.date)}</td><td style="color:${i.dueDate&&new Date(i.dueDate)<now?'var(--red)':'inherit'};">${fmtD(i.dueDate)}</td><td style="font-weight:700;color:var(--red);">${fmtDoc(i)}</td></tr>`).join('')}</tbody></table></div>`}</div></div>`;}
 
 // ═══ AUDIT LOG PAGE ═══
 function renderAudit(){
@@ -3140,7 +3170,7 @@ function shareOnWhatsApp(doc2, type) {
     'No: ' + doc2.number + '\n' +
     'Date: ' + doc2.date + '\n' +
     'Customer: ' + (doc2.customerName || doc2.supplierName || '') + '\n' +
-    'Amount: ' + fmt(doc2.total||0) + '\n' +
+    'Amount: ' + fmtDoc(doc2) + '\n' +
     'Status: ' + doc2.status + '\n\n' +
     b.name + (url?(':\n' + url):'');
 
@@ -3240,7 +3270,7 @@ function renderLedger() {
     <div class="tw"><table><thead><tr><th>CUSTOMER</th><th>TOTAL INVOICED</th><th>TOTAL PAID</th><th>BALANCE DUE</th><th></th></tr></thead>
     <tbody>${customers.map(c=>{
       const invs = (db.invoices||[]).filter(i=>i.customerName===c.name);
-      const totalInv = invs.reduce((s,i)=>s+(+i.total||0),0);
+      const totalInv = invs.reduce((s,i)=>s+docBase(i),0);
       const totalPaid = (db.payments||[]).filter(p=>p.partyName===c.name&&p.type==='received').reduce((s,p)=>s+(+p.amount||0),0);
       const balance = totalInv - totalPaid;
       return `<tr>
@@ -3262,7 +3292,7 @@ function openLedgerDetail(custId) {
   if(!c) return;
   const invs = (db.invoices||[]).filter(i=>i.customerName===c.name);
   const pmts = (db.payments||[]).filter(p=>p.partyName===c.name&&p.type==='received');
-  const totalInv = invs.reduce((s,i)=>s+(+i.total||0),0);
+  const totalInv = invs.reduce((s,i)=>s+docBase(i),0);
   const totalPaid = pmts.reduce((s,p)=>s+(+p.amount||0),0);
   const balance = totalInv - totalPaid;
   openMod(`<div class="mh"><div class="mt">📒 ${esc(c.name)} — Ledger</div><button class="btn bg bs" onclick="closeMod()">✕</button></div>
@@ -3272,7 +3302,7 @@ function openLedgerDetail(custId) {
   </div>
   <div class="ct">📄 Invoices</div>
   <div class="tw"><table><thead><tr><th>NO</th><th>DATE</th><th>AMOUNT</th><th>STATUS</th></tr></thead>
-  <tbody>${invs.map(i=>`<tr><td style="font-weight:700;">${esc(i.number)}</td><td>${fmtD(i.date)}</td><td>${fmt(i.total||0)}</td><td><span class="bdg bg-${bColor(i.status)}">${esc(i.status)}</span></td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);">No invoices</td></tr>'}
+  <tbody>${invs.map(i=>`<tr><td style="font-weight:700;">${esc(i.number)}</td><td>${fmtD(i.date)}</td><td>${fmtDoc(i)}</td><td><span class="bdg bg-${bColor(i.status)}">${esc(i.status)}</span></td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);">No invoices</td></tr>'}
   </tbody></table></div>
   <div class="ct" style="margin-top:14px;">💰 Payments Received</div>
   <div class="tw"><table><thead><tr><th>DATE</th><th>METHOD</th><th>AMOUNT</th></tr></thead>
