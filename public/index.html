@@ -708,7 +708,21 @@ async function logPlatformAction(action,details){
 window.loadSACompanies=async function(){
   try{
     const snap=await getDocs(query(collection(db,'companies'),limit(500)));
-    window.SA_COMPANIES=snap.docs.map(d=>({id:d.id,...d.data()}));
+    const companies=snap.docs.map(d=>({id:d.id,...d.data()}));
+    try{
+      const brandSnap=await getDocs(query(collectionGroup(db,'settings'),limit(500)));
+      const brandByCompany={};
+      brandSnap.docs.forEach(bd=>{
+        if(bd.id!=='branding')return;
+        const cid=bd.ref.parent&&bd.ref.parent.parent&&bd.ref.parent.parent.id;
+        if(cid)brandByCompany[cid]=bd.data();
+      });
+      companies.forEach(c=>{
+        const b=brandByCompany[c.id];
+        if(b){c.phone=b.phone||'';c.brandEmail=b.email||'';}
+      });
+    }catch(e){console.error('company contact info load failed',e);}
+    window.SA_COMPANIES=companies;
   }catch(e){console.error(e);window.SA_COMPANIES=[];toast('⚠️ Could not load companies: '+(e.code||e.message));}
   renderApp();
 };
@@ -3016,9 +3030,12 @@ function renderSACompanies(){
     ${saPageHeader('🏬','Companies',`${list.length} companies`)}
     <div class="card" style="padding:0;overflow:hidden;">
     ${list.length===0?`<div class="empty"><div class="ei">🏬</div><p>No companies yet.</p></div>`:`
-    <div class="tw"><table><thead><tr><th>COMPANY</th><th>PLAN</th><th>STATUS</th><th>TRIAL ENDS</th><th>CREATED</th><th>ACTIONS</th></tr></thead>
-    <tbody>${list.map(c=>`<tr>
+    <div class="tw"><table><thead><tr><th>COMPANY</th><th>CONTACT</th><th>PLAN</th><th>STATUS</th><th>TRIAL ENDS</th><th>CREATED</th><th>ACTIONS</th></tr></thead>
+    <tbody>${list.map(c=>{
+      const waNum=(c.phone||'').replace(/\D/g,'');
+      return `<tr>
       <td style="font-weight:700;">${esc(c.name||c.id)}</td>
+      <td style="font-size:11px;white-space:nowrap;">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:var(--navy);text-decoration:none;font-weight:600;">📞 ${esc(c.phone)}</a>${waNum?`<br><a href="https://wa.me/${waNum}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;">💬 WhatsApp</a>`:''}`:`<span style="color:var(--muted);">—</span>`}</td>
       <td>${esc(PLAN_LABELS[c.plan]||c.plan||'—')}</td>
       <td><span class="bdg" style="background:${SA_STATUS_COLOR[c.status]||'var(--muted)'};color:#fff;">${esc(c.status||'—')}</span></td>
       <td style="font-size:11px;">${c.trialEndsAt?fmtD(c.trialEndsAt.slice(0,10)):'—'}</td>
@@ -3029,7 +3046,7 @@ function renderSACompanies(){
         ${c.status!=='archived'?`<button class="btn bg bs" onclick="saSetCompanyStatus('${c.id}','archived')">Archive</button>`:''}
         <button class="btn bo bs" onclick="saExtendTrial('${c.id}',14)">+14d Trial</button>
       </td>
-    </tr>`).join('')}</tbody></table></div>`}
+    </tr>`;}).join('')}</tbody></table></div>`}
     </div>
   </div>`;
 }
