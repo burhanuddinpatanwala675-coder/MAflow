@@ -994,6 +994,15 @@ function subscribeCompanyDoc(){
     renderApp();
   });
 }
+// Mirrors the company's contact phone onto its own top-level /companies/{id}
+// doc (in addition to settings/branding) so the Super Admin Companies tab can
+// read it directly. Exposed on window because this is called from
+// saveCompanyInfo() in the classic (non-module) <script> block below, which
+// doesn't have setDoc/doc in scope — only the module script does.
+window.mirrorCompanyPhone=async function(companyId,phone){
+  try{await setDoc(doc(db,'companies',companyId),{phone:phone||''},{merge:true});return true;}
+  catch(e){console.error('mirror phone to company doc failed',e);return false;}
+};
 async function fbSave(col,doc2){
   setSyncFill('syncing');
   try{
@@ -3626,7 +3635,7 @@ async function saveCompanyInfo(){
   // Super Admin Companies tab can show it directly (it already has read
   // access to that doc for every company) without a separate cross-company
   // lookup into each company's settings subcollection.
-  try{await setDoc(doc(db,'companies',CURRENT_COMPANY_ID),{phone:result.phone||''},{merge:true});}catch(e){console.error('mirror phone to company doc failed',e);}
+  await window.mirrorCompanyPhone(CURRENT_COMPANY_ID,result.phone);
   toast('✅ Company settings saved!'); renderApp();
 }
 
