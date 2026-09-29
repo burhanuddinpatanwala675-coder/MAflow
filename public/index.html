@@ -3024,6 +3024,24 @@ function saPageHeader(icon,title,sub){
   return `<div class="ph"><div><div class="pt">${icon} ${title}</div><div class="ps">${sub}</div></div></div>`;
 }
 
+// wa.me deep links need the full international number — country code, no
+// leading 0, no +, no spaces/dashes — or WhatsApp opens the wrong chat (or
+// none at all). Phone numbers here are typically entered in local Pakistani
+// format (e.g. "0300-1234567"), so normalize: a number already given with a
+// leading + is assumed to already carry its own country code; a bare local
+// number starting with 0 gets its 0 swapped for Pakistan's 92 (the app's
+// primary market — PKR currency, NTN/STRN tax fields); anything else is
+// passed through as-is (best effort for numbers already in intl format).
+function waPhoneFmt(phone){
+  const raw=(phone||'').trim();
+  const digits=raw.replace(/\D/g,'');
+  if(!digits)return '';
+  if(raw.startsWith('+'))return digits;
+  if(digits.startsWith('92'))return digits;
+  if(digits.startsWith('0'))return '92'+digits.slice(1);
+  return digits;
+}
+
 function renderSACompanies(){
   if(!window.SA_COMPANIES){window.loadSACompanies();return `<div class="page">${saPageHeader('🏬','Companies','All companies on the platform')}<div class="card" style="text-align:center;padding:40px;color:var(--muted);">Loading companies…</div></div>`;}
   const list=window.SA_COMPANIES;
@@ -3033,7 +3051,7 @@ function renderSACompanies(){
     ${list.length===0?`<div class="empty"><div class="ei">🏬</div><p>No companies yet.</p></div>`:`
     <div class="tw"><table><thead><tr><th>COMPANY</th><th>CONTACT</th><th>PLAN</th><th>STATUS</th><th>TRIAL ENDS</th><th>CREATED</th><th>ACTIONS</th></tr></thead>
     <tbody>${list.map(c=>{
-      const waNum=(c.phone||'').replace(/\D/g,'');
+      const waNum=waPhoneFmt(c.phone);
       return `<tr>
       <td style="font-weight:700;">${esc(c.name||c.id)}</td>
       <td style="font-size:11px;white-space:nowrap;">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:var(--navy);text-decoration:none;font-weight:600;">📞 ${esc(c.phone)}</a>${waNum?`<br><a href="https://wa.me/${waNum}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;">💬 WhatsApp</a>`:''}`:`<span style="color:var(--muted);">—</span>`}</td>
