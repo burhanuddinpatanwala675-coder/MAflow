@@ -3042,6 +3042,23 @@ function waPhoneFmt(phone){
   return digits;
 }
 
+// Pre-filled WhatsApp message for the Companies tab's contact button — the
+// actual wording the Super Admin would otherwise have to type by hand each
+// time, tailored to why they'd likely be reaching out for this company's
+// current status (chase a suspended renewal, a trial about to lapse, or just
+// a general check-in). The person on the Super Admin side can still edit it
+// in WhatsApp before hitting send — this only pre-fills the first draft.
+function saContactMsg(c){
+  const name=c.name||'there';
+  if(c.status==='suspended'){
+    return `Hi ${name} team, this is from the MAflow platform team. We noticed your subscription is currently suspended — would you like to continue your plan? Let us know if you'd like help reactivating it or have any questions about payment.`;
+  }
+  if(c.status==='trial'){
+    const endsTxt=c.trialEndsAt?` on ${fmtD(c.trialEndsAt.slice(0,10))}`:' soon';
+    return `Hi ${name} team, this is from the MAflow platform team. Just checking in — your free trial ends${endsTxt}. Would you like to continue with a paid plan? Happy to help with any questions.`;
+  }
+  return `Hi ${name} team, this is from the MAflow platform team. Just checking in on your account and payment status — let us know if you have any questions or need anything.`;
+}
 function renderSACompanies(){
   if(!window.SA_COMPANIES){window.loadSACompanies();return `<div class="page">${saPageHeader('🏬','Companies','All companies on the platform')}<div class="card" style="text-align:center;padding:40px;color:var(--muted);">Loading companies…</div></div>`;}
   const list=window.SA_COMPANIES;
@@ -3054,7 +3071,7 @@ function renderSACompanies(){
       const waNum=waPhoneFmt(c.phone);
       return `<tr>
       <td style="font-weight:700;">${esc(c.name||c.id)}</td>
-      <td style="font-size:11px;white-space:nowrap;">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:var(--navy);text-decoration:none;font-weight:600;">📞 ${esc(c.phone)}</a>${waNum?`<br><a href="https://wa.me/${waNum}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;">💬 WhatsApp</a>`:''}`:`<span style="color:var(--muted);">—</span>`}</td>
+      <td style="font-size:11px;white-space:nowrap;">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:var(--navy);text-decoration:none;font-weight:600;">📞 ${esc(c.phone)}</a>${waNum?`<br><a href="https://wa.me/${waNum}?text=${encodeURIComponent(saContactMsg(c))}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:none;">💬 WhatsApp</a>`:''}`:`<span style="color:var(--muted);">—</span>`}</td>
       <td>${esc(PLAN_LABELS[c.plan]||c.plan||'—')}</td>
       <td><span class="bdg" style="background:${SA_STATUS_COLOR[c.status]||'var(--muted)'};color:#fff;">${esc(c.status||'—')}</span></td>
       <td style="font-size:11px;">${c.trialEndsAt?fmtD(c.trialEndsAt.slice(0,10)):'—'}</td>
